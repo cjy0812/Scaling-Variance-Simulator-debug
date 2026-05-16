@@ -4,10 +4,15 @@ screen_guard_checker.py
 
 目录结构：
   ./img/          ← 放原始截图
-  screen_guard_checker.py
+  main.py
 
 用法：
   python screen_guard_checker.py
+"""
+"""
+安装库:
+  pip install pillow numpy matplotlib
+  pip install opencv-python
 """
 
 import os
@@ -19,9 +24,7 @@ from PIL import Image, ImageTk, ImageDraw, ImageFont
 import numpy as np
 
 
-# ──────────────────────────────────────────────
-#  核心算法（严格对应 Kotlin）
-# ──────────────────────────────────────────────
+ #核心算法(Kotlin) https://github.com/gkd-kit/gkd/pull/1363
 
 SIZE = 64
 
@@ -94,9 +97,9 @@ def is_app_protected(img: Image.Image) -> tuple[bool, dict]:
     return protected, stats
 
 
-# ──────────────────────────────────────────────
+
 #  辅助：生成 64×64 可视化图（放大后显示）
-# ──────────────────────────────────────────────
+
 
 DISPLAY_SIZE = 256   # 展示时放大到这个尺寸
 IGNORE_PX    = int(SIZE * 0.08)   # == 5
@@ -190,9 +193,9 @@ def make_result_image(protected: bool, stats: dict) -> Image.Image:
     return img
 
 
-# ──────────────────────────────────────────────
+
 #  GUI
-# ──────────────────────────────────────────────
+
 
 class App(tk.Tk):
     def __init__(self, image_paths: list[str]):
@@ -340,10 +343,7 @@ def _pad_to(img: Image.Image, w: int, h: int) -> Image.Image:
     canvas.paste(img, (x, y))
     return canvas
 
-
-# ──────────────────────────────────────────────
 #  入口
-# ──────────────────────────────────────────────
 
 def find_images(base_dir: str) -> list[str]:
     exts = ("*.png", "*.jpg", "*.jpeg", "*.webp", "*.bmp")
