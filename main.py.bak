@@ -1,0 +1,113 @@
+import cv2
+import os
+import numpy as np
+
+def is_app_protected_simulation(img):
+    # 1. 缩小图片 (1:1 对齐 KT)
+    size = 64
+    scaled = cv2.resize(img, (size, size), interpolation=cv2.INTER_NEAREST)
+
+    # 2. 忽略图片边缘 (1:1 对齐 KT)
+    ignore = int(size * 0.08) 
+
+    sum_l = 0.0        
+    sum_sq = 0.0       
+    count = 0          
+    near_black_count = 0 
+    step = 2           
+
+    # 3. 核心循环采样
+    for y in range(ignore, size - ignore, step):
+        for x in range(ignore, size - ignore, step):
+            b, g, r = scaled[y, x]
+            l = 0.299 * r + 0.587 * g + 0.114 * b
+
+            sum_l += l
+            sum_sq += l * l
+            count += 1
+            if l < 10:
+                near_black_count += 1
+
+    if count == 0:
+        return False, None
+
+    mean = sum_l / count
+    variance = sum_sq / count - (mean * mean)
+    black_ratio = near_black_count / count
+
+    is_nearly_uniform = variance < 15.0
+    is_dominantly_black = black_ratio > 0.85 and mean < 15.0
+    final_result = is_nearly_uniform and is_dominantly_black
+
+    # --- 📸 100% 纯净图像输出逻辑 ---
+    # 提取算法实际计算的中央区域
+    sampled_pure = scaled[ignore:size-ignore:step, ignore:size-ignore:step]
+    # 强行放大以便肉眼观察像素格子，但不添加任何文字或红框标记
+    visual_pure = cv2.resize(sampled_pure, (300, 300), interpolation=cv2.INTER_NEAREST)
+
+    return final_result, {
+        "mean": mean,
+        "variance": variance,
+        "black_ratio": black_ratio,
+        "visual_pure": visual_pure  # 纯净的马赛克图
+    }
+
+def test_folder(folder="./img", output_folder="./output_img"):
+    print(f"📂 扫描目录: {os.path.abspath(folder)}")
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+    
+    if not os.path.exists(folder) or not os.listdir(folder):
+        print(f"⚠️ 请先在 {folder} 文件夹中放入测试截图！")
+        return
+
+    # 创建 3 个独立的窗口
+    cv2.namedWindow("1. Raw Image", cv2.WINDOW_NORMAL)
+    cv2.namedWindow("2. Pure Algorithm Input (Sampled)", cv2.WINDOW_AUTOSIZE)
+    cv2.namedWindow("3. Data Dashboard", cv2.WINDOW_AUTOSIZE)
+
+    print(f"\n{'文件名':<22} | {'判定结果':<6} | {'方差(Var)':<10} | {'均值(Mean)':<10}")
+    print("-" * 65)
+
+    for file in os.listdir(folder):
+        if not file.lower().endswith((".png", ".jpg", ".jpeg")):
+            continue
+
+        path = os.path.join(folder, file)
+        img = cv2.imread(path)
+        if img is None: 
+            continue
+
+        final_result, r = is_app_protected_simulation(img)
+        result_str = "✅ BLOCK" if final_result else "❌ PASS"
+        print(f"{file:<22} | {result_str:<6} | {r['variance']:<10.2f} | {r['mean']:<10.2f}")
+
+        # 1. 保存纯净的样本图到本地文件夹
+        cv2.imwrite(os.path.join(output_folder, f"pure_{file}"), r['visual_pure'])
+
+        # 2. 窗口 1：原图展示（限制高 500，防止超大截图爆屏）
+        h, w = img.shape[:2]
+        raw_preview = cv2.resize(img, (int(w * (500 / h)), 500))
+        cv2.imshow("1. Raw Image", raw_preview)
+
+        # 3. 窗口 2：纯净的算法输入像素格子（300x300 无污染）
+        cv2.imshow("2. Pure Algorithm Input (Sampled)", r['visual_pure'])
+
+        # 4. 窗口 3：独立的文本看板窗口（黑底白字，显示结果）
+        dashboard = np.zeros((150, 400, 3), dtype=np.uint8)
+        status_text = "STATUS: BLOCK" if final_result else "STATUS: PASS"
+        color = (0, 0, 255) if final_result else (0, 255, 0)
+        cv2.putText(dashboard, status_text, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+        cv2.putText(dashboard, f"Variance: {r['variance']:.2f}", (20, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+        cv2.putText(dashboard, f"Mean: {r['mean']:.2f} | Black: {r['black_ratio']:.1%}", (20, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
+        cv2.imshow("3. Data Dashboard", dashboard)
+
+        # 5. 关键：等待用户按键，随后自动刷新并切换下一张
+        # 必须把鼠标焦点点在任意一个弹出的 OpenCV 窗口上，然后按键盘任意键
+        cv2.waitKey(0)
+        
+    cv2.destroyAllWindows()
+    print("\n🎉 目录下所有图片已全部处理并放映完毕！")
+
+if __name__ == "__main__":
+    test_folder()
